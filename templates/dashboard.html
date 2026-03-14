@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">Heart Disease Analyzer</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Home</a>
+                <a class="nav-link active" href="/dashboard">Dashboard</a>
+                <a class="nav-link" href="/dataset">Dataset</a>
+                <a class="nav-link" href="/risk">Risk Analysis</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-5">
+        <h1>Interactive Dashboard</h1>
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <label for="age-filter">Age Group</label>
+                <select id="age-filter" class="form-control">
+                    <option value="">All</option>
+                    <option value="18-24">18-24</option>
+                    <option value="25-29">25-29</option>
+                    <option value="30-34">30-34</option>
+                    <option value="35-39">35-39</option>
+                    <option value="40-44">40-44</option>
+                    <option value="45-49">45-49</option>
+                    <option value="50-54">50-54</option>
+                    <option value="55-59">55-59</option>
+                    <option value="60-64">60-64</option>
+                    <option value="65-69">65-69</option>
+                    <option value="70-74">70-74</option>
+                    <option value="75-79">75-79</option>
+                    <option value="80 or older">80 or older</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="gender-filter">Gender</label>
+                <select id="gender-filter" class="form-control">
+                    <option value="">All</option>
+                    <option value="0">Female</option>
+                    <option value="1">Male</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="smoking-filter">Smoking</label>
+                <select id="smoking-filter" class="form-control">
+                    <option value="">All</option>
+                    <option value="0">No</option>
+                    <option value="1">Yes</option>
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6">
+                <h3>Age vs Heart Disease</h3>
+                <div id="age-chart"></div>
+            </div>
+            <div class="col-md-6">
+                <h3>BMI Distribution</h3>
+                <div id="bmi-chart"></div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <h3>BMI vs Heart Disease</h3>
+                <div id="bmi-hd-chart"></div>
+            </div>
+            <div class="col-md-6">
+                <h3>Smoking vs Disease Risk</h3>
+                <div id="smoking-chart"></div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <h3>Gender Distribution</h3>
+                <div id="gender-chart"></div>
+            </div>
+            <div class="col-md-6">
+                <h3>Physical Health vs Risk</h3>
+                <div id="ph-chart"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        var fullData = JSON.parse('{{ df_json|safe }}');
+
+        function updateCharts() {
+            var ageFilter = document.getElementById('age-filter').value;
+            var genderFilter = document.getElementById('gender-filter').value;
+            var smokingFilter = document.getElementById('smoking-filter').value;
+
+            var filteredData = fullData.filter(d => {
+                return (!ageFilter || d.AgeCategory === ageFilter) &&
+                       (!genderFilter || d.Sex == genderFilter) &&
+                       (!smokingFilter || d.Smoking == smokingFilter);
+            });
+
+            // Age vs Heart Disease
+            var ageHd = {};
+            filteredData.forEach(d => {
+                var cat = d.AgeCategory;
+                var hd = d.HeartDisease;
+                if (!ageHd[cat]) ageHd[cat] = {0: 0, 1: 0};
+                ageHd[cat][hd]++;
+            });
+            var ageCategories = Object.keys(ageHd);
+            var noCounts = ageCategories.map(cat => ageHd[cat][0] || 0);
+            var yesCounts = ageCategories.map(cat => ageHd[cat][1] || 0);
+            Plotly.react('age-chart', [
+                {x: ageCategories, y: noCounts, name: 'No Heart Disease', type: 'bar'},
+                {x: ageCategories, y: yesCounts, name: 'Heart Disease', type: 'bar'}
+            ], {barmode: 'stack'});
+
+            // BMI Histogram
+            var bmiValues = filteredData.map(d => d.BMI);
+            Plotly.react('bmi-chart', [{x: bmiValues, type: 'histogram'}]);
+
+            // BMI vs Heart Disease
+            var bmiHdData = filteredData.map(d => ({BMI: d.BMI, HeartDisease: d.HeartDisease}));
+            var x = bmiHdData.map(d => d.BMI);
+            var y = bmiHdData.map(d => d.HeartDisease);
+            Plotly.react('bmi-hd-chart', [{x: x, y: y, mode: 'markers', type: 'scatter'}]);
+
+            // Smoking vs Disease
+            var smokingHd = {0: {0: 0, 1: 0}, 1: {0: 0, 1: 0}};
+            filteredData.forEach(d => {
+                smokingHd[d.Smoking][d.HeartDisease]++;
+            });
+            var values = [
+                smokingHd[0][0], smokingHd[0][1], smokingHd[1][0], smokingHd[1][1]
+            ];
+            Plotly.react('smoking-chart', [{
+                labels: ['No Smoking - No Disease', 'No Smoking - Disease', 'Smoking - No Disease', 'Smoking - Disease'],
+                values: values, type: 'pie'
+            }]);
+
+            // Gender Distribution
+            var genderDist = {0: 0, 1: 0};
+            filteredData.forEach(d => genderDist[d.Sex]++);
+            Plotly.react('gender-chart', [{
+                labels: ['Female', 'Male'],
+                values: [genderDist[0], genderDist[1]], type: 'pie'
+            }]);
+
+            // Physical Health vs Risk
+            var phData = filteredData.map(d => ({PhysicalHealth: d.PhysicalHealth, HeartDisease: d.HeartDisease}));
+            var x = phData.map(d => d.PhysicalHealth);
+            var y = phData.map(d => d.HeartDisease);
+            Plotly.react('ph-chart', [{x: x, y: y, mode: 'markers', type: 'scatter'}]);
+        }
+
+        // Initial load
+        updateCharts();
+
+        // Event listeners
+        document.getElementById('age-filter').addEventListener('change', updateCharts);
+        document.getElementById('gender-filter').addEventListener('change', updateCharts);
+        document.getElementById('smoking-filter').addEventListener('change', updateCharts);
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
